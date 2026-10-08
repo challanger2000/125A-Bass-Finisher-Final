@@ -8,6 +8,7 @@
 #include "dsp/ToneMatchCaptureBuffer.h"
 #include "dsp/ToneMatchCaptureWorker.h"
 #include "BypassCrossfade.h"
+#include "DemoGate.h"
 
 #include <array>
 #include <atomic>
@@ -125,6 +126,8 @@ private:
     BypassCrossfade bypassCrossfade_ {};
     bool lastBypassed_ {false};
     bool bypassDSPDormant_ {false};
+    bool licensed_ {false};
+    DemoGate demoGate_ {};
 };
 
 } // namespace HighGainGuitarFinisher
