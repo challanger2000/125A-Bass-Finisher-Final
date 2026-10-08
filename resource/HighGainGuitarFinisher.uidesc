@@ -102,6 +102,12 @@
           frame-width="1"
           round-radius="4"/>
 
+    <view class="CView"
+          custom-view-name="HGGFDemoBadge"
+          origin="688,31"
+          size="72,24"
+          mouse-enabled="false"/>
+
     <view class="CTextLabel"
           origin="740,62"
           size="152,12"
