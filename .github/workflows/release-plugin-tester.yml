@@ -1,10 +1,10 @@
-name: Bass Finisher Full Release QA
+name: Bass Finisher Demo Release QA 2026-10-09
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - v1.0.0-engineering
+      - demo/v1.0.0-2026-10-09
     paths:
       - ".github/workflows/release-plugin-tester.yml"
       - "RELEASE-AUDIT.md"
@@ -21,7 +21,7 @@ jobs:
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 
       - name: Build plugin and complete internal QA
-        run: cmake --build build --config Release --target BassFinisher BassFinisherDSPContractTests BassFinisherToneMatchTests BassFinisherAutomationMathTests BassFinisherBypassCrossfadeTests BassFinisherStateV1Tests BassFinisherProcessorContractTests BassFinisherRealtimeAllocationTests BassFinisherToneMatchQualityTests BassFinisherControllerContractTests --parallel
+        run: cmake --build build --config Release --target BassFinisher BassFinisherDSPContractTests BassFinisherToneMatchTests BassFinisherAutomationMathTests BassFinisherBypassCrossfadeTests BassFinisherStateV1Tests BassFinisherProcessorContractTests BassFinisherRealtimeAllocationTests BassFinisherToneMatchQualityTests BassFinisherControllerContractTests BassFinisherDemoGateTests --parallel
 
       - name: Run complete internal QA
         run: ctest --test-dir build -C Release --output-on-failure -V
@@ -96,7 +96,15 @@ jobs:
             throw "125A Plugin Tester returned exit code $($process.ExitCode)"
           }
 
-          Write-Host "125A FULL RELEASE QA: PASS"
+          Write-Host "125A DEMO RELEASE QA: PASS"
+
+      - name: Verify Demo bundle has no Full license
+        shell: pwsh
+        env:
+          BASS_PLUGIN: ${{ steps.bass.outputs.plugin }}
+        run: |
+          $license = Join-Path $env:BASS_PLUGIN "Contents\Resources\125A_Bass_Finisher_V1.license"
+          if (Test-Path $license) { throw "Demo bundle unexpectedly contains Full license" }
 
       - name: Stage exact tested VST3
         shell: pwsh
@@ -110,13 +118,13 @@ jobs:
       - name: Upload exact tested VST3
         uses: actions/upload-artifact@v4
         with:
-          name: 125A-Bass-Finisher-V1-Full-Release-QA
+          name: 125A-Bass-Finisher-V1-Demo-Release-QA
           path: release-artifact
 
       - name: Upload complete 125A QA reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: 125A-Bass-Finisher-Full-Release-QA-Reports
+          name: 125A-Bass-Finisher-Demo-Release-QA-Reports
           path: plugin-tester-reports/*
           if-no-files-found: warn
