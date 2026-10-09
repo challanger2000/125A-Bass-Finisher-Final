@@ -1,4 +1,5 @@
 #include "SteelPanelView.h"
+#include "LicenseStatus.h"
 
 #include "vstgui/lib/cdrawcontext.h"
 
@@ -312,6 +313,55 @@ void SteelPanelView::draw(
     drawScrew(context, 20.0, 540.0);
     drawScrew(context, 912.0, 540.0);
 
+    setDirty(false);
+}
+
+
+DemoBadgeView::DemoBadgeView(
+    const VSTGUI::CRect& size)
+: VSTGUI::CView(size),
+  demo_(!Licensing::isLicensed()) {
+    setMouseEnabled(false);
+    setTransparency(true);
+}
+
+DemoBadgeView::DemoBadgeView(
+    const DemoBadgeView& other)
+: VSTGUI::CView(other),
+  demo_(other.demo_) {
+    setMouseEnabled(false);
+    setTransparency(true);
+}
+
+void DemoBadgeView::draw(
+    VSTGUI::CDrawContext* context) {
+    if (!demo_) {
+        setDirty(false);
+        return;
+    }
+
+    const auto r = getViewSize();
+    context->setDrawMode(
+        VSTGUI::kAntiAliasing);
+    context->setFillColor(
+        VSTGUI::CColor{
+            58, 16, 19, 245});
+    context->setFrameColor(
+        VSTGUI::CColor{
+            245, 92, 82, 255});
+    context->setLineWidth(1.0);
+    context->drawRect(
+        r,
+        VSTGUI::kDrawFilledAndStroked);
+    context->setFont(
+        VSTGUI::kNormalFontSmall);
+    context->setFontColor(
+        VSTGUI::CColor{
+            255, 229, 225, 255});
+    context->drawString(
+        "DEMO",
+        r,
+        VSTGUI::kCenterText);
     setDirty(false);
 }
 
