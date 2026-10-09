@@ -2,6 +2,7 @@
 #include "HighGainGuitarFinisherIDs.h"
 #include "dsp/LowCutMapping.h"
 #include "AutomationMath.h"
+#include "LicenseStatus.h"
 #include "ToneMatchStateIO.h"
 #include "ToneMatchMessage.h"
 #include "pluginterfaces/vst/ivstmessage.h"
@@ -31,6 +32,7 @@ tresult PLUGIN_API Processor::initialize(FUnknown* context) {
 
     addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
     addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
+    licensed_ = Licensing::isLicensed();
     return kResultOk;
 }
 
@@ -106,6 +108,7 @@ tresult PLUGIN_API Processor::setupProcessing(ProcessSetup& setup) {
 
     lastBypassed_ = bypassed;
     bypassDSPDormant_ = bypassed;
+    demoGate_.configure(sampleRate_, licensed_);
 
     return AudioEffect::setupProcessing(setup);
 }
@@ -749,6 +752,18 @@ tresult PLUGIN_API Processor::process(ProcessData& data) {
                 data.inputParameterChanges);
     } else {
         return kResultFalse;
+    }
+
+    if (data.symbolicSampleSize == kSample32) {
+        demoGate_.process(
+            data.outputs[0].channelBuffers32,
+            numChannels,
+            data.numSamples);
+    } else {
+        demoGate_.process(
+            data.outputs[0].channelBuffers64,
+            numChannels,
+            data.numSamples);
     }
 
     data.outputs[0].silenceFlags =
