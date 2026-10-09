@@ -1297,6 +1297,198 @@ ToneMatchAnalyzer::makeProfile(
         std::complex<double>,
         kDesignFftSize> logSpectrum {};
 
+    const auto rawRequestedCorrectionDb =
+        [&](double frequency) noexcept {
+
+            return
+                snapshotMagnitudeDb(
+                    reference,
+                    frequency) -
+                snapshotMagnitudeDb(
+                    target,
+                    frequency) -
+                levelOffsetDb;
+        };
+
+    // Bass MATCH should follow the broad tonal envelope rather than reproduce
+    // note-specific harmonics, narrow resonances or cabinet/room microstructure.
+    // Keep the full 512-point analysis, then regularize the correction in log
+    // frequency before the minimum-phase FIR is generated. A one-third-octave
+    // triangular window (half-width = one sixth octave) preserves broad bass
+    // balance while strongly reducing narrow spectral detail.
+    constexpr std::size_t kCorrectionPointCount =
+        kCurveBins;
+
+    std::array<double, kCorrectionPointCount>
+        rawCorrectionDb {};
+
+    std::array<double, kCorrectionPointCount>
+        smoothedCorrectionDb {};
+
+    const double octaveSpan =
+        std::max(
+            std::log2(
+                maximumMatchHz /
+                kMinimumMatchHz),
+            1.0e-6);
+
+    const double pointsPerOctave =
+        static_cast<double>(
+            kCorrectionPointCount - 1u) /
+        octaveSpan;
+
+    const std::size_t smoothingRadius =
+        std::max<std::size_t>(
+            1u,
+            static_cast<std::size_t>(
+                std::ceil(
+                    pointsPerOctave / 6.0)));
+
+    for (std::size_t i = 0u;
+         i < kCorrectionPointCount;
+         ++i) {
+
+        const double position =
+            static_cast<double>(i) /
+            static_cast<double>(
+                kCorrectionPointCount - 1u);
+
+        const double frequency =
+            std::exp(
+                logMinimum +
+                (logMaximum -
+                 logMinimum) *
+                    position);
+
+        const double center =
+            rawRequestedCorrectionDb(
+                frequency);
+
+        const double lower =
+            rawRequestedCorrectionDb(
+                std::max(
+                    kMinimumMatchHz,
+                    frequency / 1.025));
+
+        const double upper =
+            rawRequestedCorrectionDb(
+                std::min(
+                    maximumMatchHz,
+                    frequency * 1.025));
+
+        const double neighbourMean =
+            0.5 * (lower + upper);
+
+        const double localSpread =
+            std::abs(lower - upper);
+
+        const bool isolatedSpike =
+            std::abs(
+                center -
+                neighbourMean) >
+            std::max(
+                3.0,
+                2.5 * localSpread);
+
+        rawCorrectionDb[i] =
+            isolatedSpike
+                ? neighbourMean
+                : center;
+    }
+
+    for (std::size_t i = 0u;
+         i < kCorrectionPointCount;
+         ++i) {
+
+        long double weightedSum = 0.0L;
+        long double weightSum = 0.0L;
+
+        const std::size_t first =
+            i > smoothingRadius
+                ? i - smoothingRadius
+                : 0u;
+
+        const std::size_t last =
+            std::min(
+                kCorrectionPointCount - 1u,
+                i + smoothingRadius);
+
+        for (std::size_t j = first;
+             j <= last;
+             ++j) {
+
+            const std::size_t distance =
+                i > j
+                    ? i - j
+                    : j - i;
+
+            const double weight =
+                static_cast<double>(
+                    smoothingRadius +
+                    1u -
+                    distance);
+
+            weightedSum +=
+                static_cast<long double>(
+                    rawCorrectionDb[j]) *
+                weight;
+
+            weightSum += weight;
+        }
+
+        smoothedCorrectionDb[i] =
+            weightSum > 0.0L
+                ? static_cast<double>(
+                      weightedSum /
+                      weightSum)
+                : rawCorrectionDb[i];
+    }
+
+    const auto requestedCorrectionDb =
+        [&](double frequency) noexcept {
+
+            const double position =
+                std::clamp(
+                    (std::log(
+                         std::clamp(
+                             frequency,
+                             kMinimumMatchHz,
+                             maximumMatchHz)) -
+                     logMinimum) /
+                        std::max(
+                            logMaximum -
+                                logMinimum,
+                            1.0e-12),
+                    0.0,
+                    1.0);
+
+            const double exact =
+                position *
+                static_cast<double>(
+                    kCorrectionPointCount - 1u);
+
+            const std::size_t i0 =
+                std::min(
+                    static_cast<std::size_t>(
+                        std::floor(exact)),
+                    kCorrectionPointCount - 1u);
+
+            const std::size_t i1 =
+                std::min(
+                    i0 + 1u,
+                    kCorrectionPointCount - 1u);
+
+            const double t =
+                exact -
+                static_cast<double>(i0);
+
+            return
+                smoothedCorrectionDb[i0] +
+                (smoothedCorrectionDb[i1] -
+                 smoothedCorrectionDb[i0]) *
+                    t;
+        };
+
     for (std::size_t bin = 0;
          bin < kDesignBins;
          ++bin) {
@@ -1314,74 +1506,20 @@ ToneMatchAnalyzer::makeProfile(
             frequency <=
                 maximumMatchHz) {
 
-            const auto differenceAt =
-                [&](double f) noexcept {
-                    return
-                        snapshotMagnitudeDb(
-                            reference,
-                            f) -
-                        snapshotMagnitudeDb(
-                            target,
-                            f) -
-                        levelOffsetDb;
-                };
-
-            const double center =
-                differenceAt(
-                    frequency);
-
-            const double lower =
-                differenceAt(
-                    std::max(
-                        kMinimumMatchHz,
-                        frequency / 1.025));
-
-            const double upper =
-                differenceAt(
-                    std::min(
-                        maximumMatchHz,
-                        frequency * 1.025));
-
-            const double neighbourMean =
-                0.5 * (lower + upper);
-
-            const double localSpread =
-                std::abs(lower - upper);
-
-            const bool isolatedSpike =
-                std::abs(
-                    center -
-                    neighbourMean) >
-                std::max(
-                    3.0,
-                    2.5 * localSpread);
-
-            correctionDb =
-                isolatedSpike
-                    ? neighbourMean
-                    : center;
-
             correctionDb =
                 std::clamp(
-                    correctionDb,
+                    requestedCorrectionDb(
+                        frequency),
                     -kMaximumCorrectionDb,
                     kMaximumCorrectionDb);
         } else if (
             frequency <
                 kMinimumMatchHz) {
 
-            const double edge =
-                snapshotMagnitudeDb(
-                    reference,
-                    kMinimumMatchHz) -
-                snapshotMagnitudeDb(
-                    target,
-                    kMinimumMatchHz) -
-                levelOffsetDb;
-
             correctionDb =
                 std::clamp(
-                    edge,
+                    requestedCorrectionDb(
+                        kMinimumMatchHz),
                     -kMaximumCorrectionDb,
                     kMaximumCorrectionDb);
         } else {
@@ -1394,13 +1532,8 @@ ToneMatchAnalyzer::makeProfile(
 
                 const double edge =
                     std::clamp(
-                        snapshotMagnitudeDb(
-                            reference,
-                            maximumMatchHz) -
-                        snapshotMagnitudeDb(
-                            target,
-                            maximumMatchHz) -
-                        levelOffsetDb,
+                        requestedCorrectionDb(
+                            maximumMatchHz),
                         -kMaximumCorrectionDb,
                         kMaximumCorrectionDb);
 

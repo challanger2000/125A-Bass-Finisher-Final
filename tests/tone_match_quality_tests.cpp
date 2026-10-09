@@ -1140,6 +1140,27 @@ void verifyFirTracksMeasuredDifferenceCurve() {
                 ToneMatchAnalyzer::kCurveMaximumHz,
                 reference.sampleRate * 0.45));
 
+    constexpr double kMinimumMatchHz = 30.0;
+    constexpr double kMaximumMatchHz = 12000.0;
+    const double maximumMatchHz =
+        std::min(
+            kMaximumMatchHz,
+            reference.sampleRate * 0.45);
+
+    std::array<double, kPoints>
+        rawDesired {};
+
+    std::array<double, kPoints>
+        smoothedDesired {};
+
+    const auto differenceAt =
+        [&](double f) {
+            return
+                sampleCurve(reference, f) -
+                sampleCurve(target, f) -
+                levelOffsetDb;
+        };
+
     for (std::size_t i = 0;
          i < kPoints;
          ++i) {
@@ -1156,92 +1177,129 @@ void verifyFirTracksMeasuredDifferenceCurve() {
                  logMinimum) *
                     position);
 
-        constexpr double kMinimumMatchHz = 30.0;
-        constexpr double kMaximumMatchHz = 12000.0;
-        const double maximumMatchHz =
-            std::min(
-                kMaximumMatchHz,
-                reference.sampleRate * 0.45);
+        const double center =
+            differenceAt(frequency);
 
-        const auto differenceAt =
-            [&](double f) {
-                return
-                    sampleCurve(reference, f) -
-                    sampleCurve(target, f) -
-                    levelOffsetDb;
-            };
-
-        double desired = 0.0;
-
-        if (frequency >= kMinimumMatchHz &&
-            frequency <= maximumMatchHz) {
-
-            const double center =
-                differenceAt(frequency);
-
-            const double lower =
-                differenceAt(
-                    std::max(
-                        kMinimumMatchHz,
-                        frequency / 1.025));
-
-            const double upper =
-                differenceAt(
-                    std::min(
-                        maximumMatchHz,
-                        frequency * 1.025));
-
-            const double neighbourMean =
-                0.5 * (lower + upper);
-
-            const double localSpread =
-                std::abs(lower - upper);
-
-            const bool isolatedSpike =
-                std::abs(
-                    center -
-                    neighbourMean) >
+        const double lower =
+            differenceAt(
                 std::max(
-                    3.0,
-                    2.5 * localSpread);
+                    kMinimumMatchHz,
+                    frequency / 1.025));
 
-            desired =
-                std::clamp(
-                    isolatedSpike
-                        ? neighbourMean
-                        : center,
-                    -24.0,
-                    24.0);
+        const double upper =
+            differenceAt(
+                std::min(
+                    maximumMatchHz,
+                    frequency * 1.025));
 
-        } else if (frequency < kMinimumMatchHz) {
+        const double neighbourMean =
+            0.5 * (lower + upper);
 
-            desired =
-                std::clamp(
-                    differenceAt(kMinimumMatchHz),
-                    -24.0,
-                    24.0);
+        const double localSpread =
+            std::abs(lower - upper);
 
-        } else {
+        const bool isolatedSpike =
+            std::abs(
+                center -
+                neighbourMean) >
+            std::max(
+                3.0,
+                2.5 * localSpread);
 
-            const double nyquist =
-                reference.sampleRate * 0.5;
+        rawDesired[i] =
+            isolatedSpike
+                ? neighbourMean
+                : center;
+    }
 
-            const double edge =
-                std::clamp(
-                    differenceAt(maximumMatchHz),
-                    -24.0,
-                    24.0);
+    const double octaveSpan =
+        std::max(
+            std::log2(
+                maximumMatchHz /
+                kMinimumMatchHz),
+            1.0e-6);
 
-            const double t =
-                std::clamp(
-                    (frequency - maximumMatchHz) /
-                    (nyquist - maximumMatchHz),
-                    0.0,
-                    1.0);
+    const double pointsPerOctave =
+        static_cast<double>(
+            kPoints - 1u) /
+        octaveSpan;
 
-            desired =
-                edge * (1.0 - t);
+    const std::size_t smoothingRadius =
+        std::max<std::size_t>(
+            1u,
+            static_cast<std::size_t>(
+                std::ceil(
+                    pointsPerOctave / 6.0)));
+
+    for (std::size_t i = 0;
+         i < kPoints;
+         ++i) {
+
+        long double weightedSum = 0.0L;
+        long double weightSumLocal = 0.0L;
+
+        const std::size_t first =
+            i > smoothingRadius
+                ? i - smoothingRadius
+                : 0u;
+
+        const std::size_t last =
+            std::min(
+                kPoints - 1u,
+                i + smoothingRadius);
+
+        for (std::size_t j = first;
+             j <= last;
+             ++j) {
+
+            const std::size_t d =
+                i > j
+                    ? i - j
+                    : j - i;
+
+            const double weight =
+                static_cast<double>(
+                    smoothingRadius +
+                    1u -
+                    d);
+
+            weightedSum +=
+                static_cast<long double>(
+                    rawDesired[j]) *
+                weight;
+
+            weightSumLocal += weight;
         }
+
+        smoothedDesired[i] =
+            weightSumLocal > 0.0L
+                ? static_cast<double>(
+                      weightedSum /
+                      weightSumLocal)
+                : rawDesired[i];
+    }
+
+    for (std::size_t i = 0;
+         i < kPoints;
+         ++i) {
+
+        const double position =
+            static_cast<double>(i) /
+            static_cast<double>(
+                kPoints - 1u);
+
+        const double frequency =
+            std::exp(
+                logMinimum +
+                (logMaximum -
+                 logMinimum) *
+                    position);
+
+        const double desired =
+            std::clamp(
+                smoothedDesired[i],
+                -24.0,
+                24.0);
 
         const double actual =
             responseDb(
@@ -1396,6 +1454,119 @@ void verifyMeasuredAnalyzerSeparatesLevelFromTone() {
     BF_REQUIRE(maximumMagnitude < 0.25);
 }
 
+void verifyHighResolutionNarrowFeatureProtection() {
+    constexpr double sampleRate = 48000.0;
+    constexpr double centerHz = 420.0;
+    constexpr double sigmaLog = 0.018;
+
+    for (const double requestedPeakDb :
+         {+12.0, -12.0}) {
+
+        ToneMatchSpectrumSnapshot reference {};
+        ToneMatchSpectrumSnapshot target {};
+
+        reference.sampleRate = sampleRate;
+        target.sampleRate = sampleRate;
+        reference.frameCount = 64u;
+        target.frameCount = 64u;
+        reference.hasLogCurve = true;
+        target.hasLogCurve = true;
+
+        const double logMinimum =
+            std::log(
+                ToneMatchAnalyzer::kCurveMinimumHz);
+
+        const double logMaximum =
+            std::log(
+                ToneMatchAnalyzer::kCurveMaximumHz);
+
+        for (std::size_t i = 0u;
+             i < ToneMatchAnalyzer::kCurveBins;
+             ++i) {
+
+            const double position =
+                static_cast<double>(i) /
+                static_cast<double>(
+                    ToneMatchAnalyzer::kCurveBins - 1u);
+
+            const double frequency =
+                std::exp(
+                    logMinimum +
+                    (logMaximum -
+                     logMinimum) *
+                        position);
+
+            const double x =
+                std::log(
+                    frequency /
+                    centerHz);
+
+            const double narrowFeatureDb =
+                requestedPeakDb *
+                std::exp(
+                    -0.5 *
+                    (x * x) /
+                    (sigmaLog * sigmaLog));
+
+            target.meanDb[i] = -24.0;
+            reference.meanDb[i] =
+                -24.0 +
+                narrowFeatureDb;
+        }
+
+        const auto profile =
+            ToneMatchAnalyzer::makeProfile(
+                reference,
+                target);
+
+        BF_REQUIRE(profile.valid);
+        BF_REQUIRE(profile.firValid);
+
+        double strongestAbsoluteDb = 0.0;
+
+        constexpr std::size_t probePoints = 256u;
+
+        for (std::size_t i = 0u;
+             i < probePoints;
+             ++i) {
+
+            const double position =
+                static_cast<double>(i) /
+                static_cast<double>(
+                    probePoints - 1u);
+
+            const double frequency =
+                std::exp(
+                    std::log(250.0) +
+                    (std::log(700.0) -
+                     std::log(250.0)) *
+                        position);
+
+            strongestAbsoluteDb =
+                std::max(
+                    strongestAbsoluteDb,
+                    std::abs(
+                        responseDb(
+                            profile,
+                            sampleRate,
+                            frequency)));
+        }
+
+        std::cout
+            << "NARROW BASS FEATURE "
+            << requestedPeakDb
+            << " dB -> strongest="
+            << strongestAbsoluteDb
+            << " dB\n";
+
+        BF_REQUIRE(
+            strongestAbsoluteDb > 1.0);
+
+        BF_REQUIRE(
+            strongestAbsoluteDb < 6.0);
+    }
+}
+
 int main() {
     verifyDistanceImproves();
     verifyNarrowSpikeIsRejected();
@@ -1406,6 +1577,7 @@ int main() {
     verifyRealProgramMaterialBeatsPreviousBest();
     verifyGeneralizationSuite();
     verifyFirTracksMeasuredDifferenceCurve();
+    verifyHighResolutionNarrowFeatureProtection();
     verifyMeasuredAnalyzerSeparatesLevelFromTone();
 
     std::cout
