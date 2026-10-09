@@ -476,6 +476,14 @@ Controller::createCustomView(
             rect);
     }
 
+    if (std::strcmp(
+            name,
+            "HGGFDemoBadge") == 0) {
+
+        return new DemoBadgeView(
+            rect);
+    }
+
     int32 tag = -1;
     auto style =
         SteelKnob::Style::Small;
