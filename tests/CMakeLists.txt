@@ -164,3 +164,25 @@ if(MSVC)
     target_link_options(BassFinisherProcessorContractTests PRIVATE /STACK:8388608)
     target_link_options(BassFinisherToneMatchQualityTests PRIVATE /STACK:8388608)
 endif()
+
+
+add_executable(BassFinisherDemoGateTests
+    demo_gate_tests.cpp
+)
+target_include_directories(
+    BassFinisherDemoGateTests
+    PRIVATE
+        ../src
+)
+target_compile_features(
+    BassFinisherDemoGateTests
+    PRIVATE
+        cxx_std_17
+)
+hggf_enable_project_warnings(
+    BassFinisherDemoGateTests
+)
+add_test(
+    NAME BassFinisherDemoGateTests
+    COMMAND BassFinisherDemoGateTests
+)
