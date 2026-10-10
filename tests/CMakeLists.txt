@@ -164,3 +164,25 @@ if(MSVC)
     target_link_options(BassFinisherProcessorContractTests PRIVATE /STACK:8388608)
     target_link_options(BassFinisherToneMatchQualityTests PRIVATE /STACK:8388608)
 endif()
+
+# V1.0.1: exact sample/phase-preserving zero-latency FIR regression.
+add_executable(BassFinisherPartitionedFIRTests
+    bass_partitioned_fir_tests.cpp
+    ../src/dsp/ToneMatchDSP.cpp
+)
+target_include_directories(BassFinisherPartitionedFIRTests
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../src/dsp)
+target_compile_features(BassFinisherPartitionedFIRTests PRIVATE cxx_std_17)
+hggf_enable_project_warnings(BassFinisherPartitionedFIRTests)
+add_test(NAME BassFinisherPartitionedFIRTests COMMAND BassFinisherPartitionedFIRTests)
+
+# V1.0.1: same-runner direct 4096-tap vs partitioned FIR CPU benchmark.
+add_executable(BassFinisherFirCpuBenchmark
+    bass_fir_cpu_benchmark.cpp
+    ../src/dsp/ToneMatchDSP.cpp
+)
+target_include_directories(BassFinisherFirCpuBenchmark
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../src/dsp)
+target_compile_features(BassFinisherFirCpuBenchmark PRIVATE cxx_std_17)
+hggf_enable_project_warnings(BassFinisherFirCpuBenchmark)
+add_test(NAME BassFinisherFirCpuBenchmark COMMAND BassFinisherFirCpuBenchmark)

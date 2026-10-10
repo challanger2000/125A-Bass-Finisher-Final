@@ -466,13 +466,13 @@ uint64 Processor::processBlock(
     dsp::ToneMatchProfile pendingToneMatch {};
 
     if (toneMatchMailbox_.popLatest(
-            pendingToneMatch)) {
+            pendingToneMatch, pendingToneMatchKernel_.get())) {
 
         toneMatchProfile_ =
             pendingToneMatch;
 
         finisher_.setToneMatchProfile(
-            toneMatchProfile_);
+            toneMatchProfile_, *pendingToneMatchKernel_);
     }
 
     if (bypassed != lastBypassed_) {

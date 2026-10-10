@@ -2,13 +2,18 @@
 
 #include "Biquad.h"
 #include "ToneMatchProfile.h"
+#include "ZeroLatencyPartitionedFIR.h"
 
 #include <array>
+#include <memory>
 
 namespace HighGainGuitarFinisher::dsp {
 
 class ToneMatchDSP {
 public:
+    ToneMatchDSP()
+        : fir_(std::make_unique<ZeroLatencyPartitionedFIR>()) {}
+
     void prepare(double sampleRate);
     void reset() noexcept;
 
@@ -17,6 +22,8 @@ public:
         double lowCutNormalized,
         double massNormalized) noexcept;
     void setProfile(const ToneMatchProfile& profile) noexcept;
+    void setProfile(const ToneMatchProfile& profile,
+                    const ZeroLatencyPartitionedFIR::PreparedKernel& kernel) noexcept;
     void clearProfile() noexcept;
 
     void processFrame(
@@ -39,19 +46,13 @@ private:
         double amount) noexcept;
 
     void resetFilters() noexcept;
-    double processFirSample(
-        double input,
-        std::array<double, 2 * kToneMatchFirTapCount>& history) noexcept;
-
     std::array<Biquad, 2> lowShelf_ {};
     std::array<
         std::array<Biquad, 2>,
         kToneMatchPeakCount> peaks_ {};
     std::array<Biquad, 2> highShelf_ {};
 
-    std::array<double, 2 * kToneMatchFirTapCount> firHistoryLeft_ {};
-    std::array<double, 2 * kToneMatchFirTapCount> firHistoryRight_ {};
-    std::size_t firWriteIndex_ {0};
+    std::unique_ptr<ZeroLatencyPartitionedFIR> fir_ {};
 
     ToneMatchProfile profile_ {};
 

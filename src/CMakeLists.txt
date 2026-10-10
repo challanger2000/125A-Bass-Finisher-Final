@@ -56,6 +56,7 @@ set(BASS_FINISHER_SOURCES
     dsp/ToneMatchCaptureWorker.h
     dsp/ToneMatchAnalyzer.h
     dsp/ToneMatchAnalyzer.cpp
+    dsp/ZeroLatencyPartitionedFIR.h
     dsp/ToneMatchDSP.h
     dsp/ToneMatchDSP.cpp
     dsp/MetalFinisherDSP.h

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(BassFinisher VERSION 1.0.0)
+project(BassFinisher VERSION 1.0.1)
 
 find_package(Threads REQUIRED)
 

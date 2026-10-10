@@ -5,9 +5,14 @@ on:
   push:
     branches:
       - v1.0.0-engineering
+      - fix/v1.0.1-cpu
     paths:
       - ".github/workflows/release-plugin-tester.yml"
       - "RELEASE-AUDIT.md"
+      - "CMakeLists.txt"
+      - "src/**"
+      - "tests/**"
+      - "resource/**"
 
 jobs:
   release-qa:
@@ -21,7 +26,7 @@ jobs:
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 
       - name: Build plugin and complete internal QA
-        run: cmake --build build --config Release --target BassFinisher BassFinisherDSPContractTests BassFinisherToneMatchTests BassFinisherAutomationMathTests BassFinisherBypassCrossfadeTests BassFinisherStateV1Tests BassFinisherProcessorContractTests BassFinisherRealtimeAllocationTests BassFinisherToneMatchQualityTests BassFinisherControllerContractTests --parallel
+        run: cmake --build build --config Release --target BassFinisher BassFinisherDSPContractTests BassFinisherToneMatchTests BassFinisherAutomationMathTests BassFinisherBypassCrossfadeTests BassFinisherStateV1Tests BassFinisherProcessorContractTests BassFinisherRealtimeAllocationTests BassFinisherToneMatchQualityTests BassFinisherControllerContractTests BassFinisherPartitionedFIRTests BassFinisherFirCpuBenchmark --parallel
 
       - name: Run complete internal QA
         run: ctest --test-dir build -C Release --output-on-failure -V
@@ -34,6 +39,68 @@ jobs:
           if (-not $plugin) { throw "125A-Bass-Finisher-V1.vst3 bundle not found" }
           "plugin=$($plugin.FullName)" >> $env:GITHUB_OUTPUT
           Write-Host "Testing exact bundle: $($plugin.FullName)"
+
+      - name: Verify V1.0.1 module metadata
+        if: github.ref_name == 'fix/v1.0.1-cpu'
+        shell: pwsh
+        run: |
+          $module = Get-ChildItem -Path build -Recurse -File -Filter moduleinfo.json | Where-Object { $_.FullName -match "125A-Bass-Finisher-V1.vst3" } | Select-Object -First 1
+          if (-not $module) { throw "Bass moduleinfo.json missing" }
+          $info = Get-Content $module.FullName -Raw
+          if ($info -notmatch '"Version"\s*:\s*"1\.0\.1"') { throw "Wrong V1.0.1 module version" }
+
+      - name: Checkout V1.0.0 final DSP baseline
+        if: github.ref_name == 'fix/v1.0.1-cpu'
+        uses: actions/checkout@v4
+        with:
+          ref: 6169717015fcecaf872be007aadbb6660fc8e00b
+          path: _baseline_v100
+
+      - name: Configure paired V1.0.0 / V1.0.1 DSP performance harness
+        if: github.ref_name == 'fix/v1.0.1-cpu'
+        shell: pwsh
+        run: |
+          $b = (Resolve-Path _baseline_v100).Path.Replace('\', '/')
+          $n = (Get-Location).Path.Replace('\', '/')
+          cmake -S tests/performance-matrix -B build-perf-100 -G "Visual Studio 17 2022" -A x64 "-DBASS_DSP_ROOT=$b"
+          if ($LASTEXITCODE -ne 0) { throw "V1.0.0 performance configure failed" }
+          cmake -S tests/performance-matrix -B build-perf-101 -G "Visual Studio 17 2022" -A x64 "-DBASS_DSP_ROOT=$n"
+          if ($LASTEXITCODE -ne 0) { throw "V1.0.1 performance configure failed" }
+
+      - name: Compile paired full-chain performance harnesses
+        if: github.ref_name == 'fix/v1.0.1-cpu'
+        shell: pwsh
+        run: |
+          cmake --build build-perf-100 --config Release --parallel 4
+          if ($LASTEXITCODE -ne 0) { throw "V1.0.0 performance build failed" }
+          cmake --build build-perf-101 --config Release --parallel 4
+          if ($LASTEXITCODE -ne 0) { throw "V1.0.1 performance build failed" }
+
+      - name: Paired full-chain CPU, p99 and sample-null regression
+        if: github.ref_name == 'fix/v1.0.1-cpu'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force perf-evidence | Out-Null
+          $old = "build-perf-100/Release/BassFinisherPerformanceMatrix.exe"
+          $now = "build-perf-101/Release/BassFinisherPerformanceMatrix.exe"
+          & $old matrix perf-evidence/baseline-cpu.csv
+          if ($LASTEXITCODE -ne 0) { throw "Baseline CPU measurement failed" }
+          & $now matrix perf-evidence/v101-cpu.csv
+          if ($LASTEXITCODE -ne 0) { throw "Candidate CPU measurement failed" }
+          & $old render perf-evidence/baseline-audio.csv
+          if ($LASTEXITCODE -ne 0) { throw "Baseline audio render failed" }
+          & $now render perf-evidence/v101-audio.csv
+          if ($LASTEXITCODE -ne 0) { throw "Candidate audio render failed" }
+          python tests/performance-matrix/compare_fullchain.py perf-evidence/baseline-cpu.csv perf-evidence/v101-cpu.csv perf-evidence/baseline-audio.csv perf-evidence/v101-audio.csv perf-evidence/verdict.json
+          if ($LASTEXITCODE -ne 0) { throw "Full Bass Finisher CPU/audio A-B regression" }
+
+      - name: Upload CPU and audio A-B measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 125A-Bass-Finisher-V1-v1.0.1-FullChain-CPU-Audio-QA
+          path: perf-evidence/*
+          if-no-files-found: ignore
 
       - name: Checkout 125A Plugin Tester v0.2.9 source
         uses: actions/checkout@v4
@@ -110,7 +177,7 @@ jobs:
       - name: Upload exact tested VST3
         uses: actions/upload-artifact@v4
         with:
-          name: 125A-Bass-Finisher-V1-Full-Release-QA
+          name: 125A-Bass-Finisher-V1-v1.0.1-Windows-x64-Full-Release-QA
           path: release-artifact
 
       - name: Upload complete 125A QA reports

@@ -510,7 +510,7 @@
     <view class="CTextLabel"
           origin="795,512"
           size="100,12"
-          title="v1.0.0"
+          title="v1.0.1"
           transparent="true"
           font-color="Minor"
           font="MinorFont"

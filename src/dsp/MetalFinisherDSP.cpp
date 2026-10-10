@@ -260,6 +260,10 @@ void MetalFinisherDSP::reset() noexcept {
 
     massCoefficientCountdown_ = 0;
     makeupShelfCoefficientCountdown_ = 0;
+    lastMassContext_ = -1.0;
+    lastLowCutFrequencyHz_ = -1.0;
+    lastLowControlGainDb_ = 1000.0;
+    lastMakeupCancellationDb_ = 1000.0;
 
     lowEnd_.reset();
     body_.reset();
@@ -359,6 +363,9 @@ void MetalFinisherDSP::setLowCut(double normalized) noexcept {
 }
 
 void MetalFinisherDSP::updateLowCutCoefficients() noexcept {
+    if (lowCutFrequencyHz_ == lastLowCutFrequencyHz_)
+        return;
+    lastLowCutFrequencyHz_ = lowCutFrequencyHz_;
     const auto coefficients =
         makeHighPass(
             sampleRate_,
@@ -370,6 +377,9 @@ void MetalFinisherDSP::updateLowCutCoefficients() noexcept {
 }
 
 void MetalFinisherDSP::updateLowControlCoefficients() noexcept {
+    if (lowControlDynamicGainDb_ == lastLowControlGainDb_)
+        return;
+    lastLowControlGainDb_ = lowControlDynamicGainDb_;
     const auto coefficients =
         makeLowShelf(
             sampleRate_,
@@ -391,6 +401,10 @@ void MetalFinisherDSP::updateMassCoefficients() noexcept {
                 0.0,
                 1.0);
     }
+
+    if (context == lastMassContext_)
+        return;
+    lastMassContext_ = context;
 
     const double boostHz =
         kMassBoostHz +
@@ -449,6 +463,10 @@ void MetalFinisherDSP::updateMakeupShelfCoefficients() noexcept {
     const double cancellationDb =
         -autoLevel_.currentGainDb();
 
+    if (cancellationDb == lastMakeupCancellationDb_)
+        return;
+    lastMakeupCancellationDb_ = cancellationDb;
+
     const auto lowShelf =
         makeLowShelf(
             sampleRate_,
@@ -484,6 +502,13 @@ void MetalFinisherDSP::setToneMatchProfile(
     const ToneMatchProfile& profile) noexcept {
 
     toneMatch_.setProfile(profile);
+}
+
+void MetalFinisherDSP::setToneMatchProfile(
+    const ToneMatchProfile& profile,
+    const ZeroLatencyPartitionedFIR::PreparedKernel& kernel) noexcept {
+
+    toneMatch_.setProfile(profile, kernel);
 }
 
 void MetalFinisherDSP::clearToneMatchProfile() noexcept {

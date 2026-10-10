@@ -38,6 +38,8 @@ void ToneMatchDSP::prepare(double sampleRate) {
 
     prepared_ = true;
     sanitizeProfile(profile_);
+    if (profile_.firValid)
+        fir_->setKernel(profile_.firTaps);
     reset();
 }
 
@@ -52,9 +54,7 @@ void ToneMatchDSP::resetFilters() noexcept {
     for (auto& filter : highShelf_)
         filter.reset();
 
-    firHistoryLeft_.fill(0.0);
-    firHistoryRight_.fill(0.0);
-    firWriteIndex_ = 0;
+    fir_->reset();
 }
 
 void ToneMatchDSP::reset() noexcept {
@@ -74,7 +74,7 @@ void ToneMatchDSP::reset() noexcept {
 
     resetFilters();
 
-    if (!bypassState_)
+    if (!bypassState_ && !profile_.firValid)
         updateCoefficients(
             amountSmoothed_);
 }
@@ -203,7 +203,10 @@ void ToneMatchDSP::setProfile(
     const ToneMatchProfile& profile) noexcept {
 
     sanitizeProfile(profile);
-
+    // This overload is restricted to control-thread setup / project restore.
+    // Live match changes use prepared spectra from the producer mailbox.
+    if (profile_.firValid)
+        fir_->setKernel(profile_.firTaps);
     resetFilters();
     lastCoefficientAmount_ = -1.0;
     coefficientCountdown_ = 0;
@@ -212,8 +215,29 @@ void ToneMatchDSP::setProfile(
         profile_.valid &&
         amountSmoothed_ > 0.0) {
 
-        updateCoefficients(
-            amountSmoothed_);
+        if (!profile_.firValid)
+            updateCoefficients(amountSmoothed_);
+        bypassState_ = false;
+    } else {
+        bypassState_ = true;
+    }
+}
+
+void ToneMatchDSP::setProfile(
+    const ToneMatchProfile& profile,
+    const ZeroLatencyPartitionedFIR::PreparedKernel& kernel) noexcept {
+
+    // Audio callback: fixed-size precomputed data copy, no FFT or allocation.
+    sanitizeProfile(profile);
+    if (profile_.firValid)
+        fir_->installKernel(kernel);
+    resetFilters();
+    lastCoefficientAmount_ = -1.0;
+    coefficientCountdown_ = 0;
+
+    if (prepared_ && profile_.valid && amountSmoothed_ > 0.0) {
+        if (!profile_.firValid)
+            updateCoefficients(amountSmoothed_);
         bypassState_ = false;
     } else {
         bypassState_ = true;
@@ -293,32 +317,6 @@ void ToneMatchDSP::updateCoefficients(
         kCoefficientUpdateInterval;
 }
 
-double ToneMatchDSP::processFirSample(
-    double input,
-    std::array<double, 2 * kToneMatchFirTapCount>& history) noexcept {
-
-    history[firWriteIndex_] = input;
-    history[firWriteIndex_ + kToneMatchFirTapCount] = input;
-
-    const double* samples =
-        history.data() + firWriteIndex_;
-
-    double sum = 0.0;
-
-    for (std::size_t i = 0;
-         i < kToneMatchFirTapCount;
-         ++i) {
-
-        sum +=
-            profile_.firTaps[i] *
-            samples[i];
-    }
-
-    return std::isfinite(sum)
-        ? sum
-        : 0.0;
-}
-
 void ToneMatchDSP::processFrame(
     double& left,
     double& right) noexcept {
@@ -365,23 +363,12 @@ void ToneMatchDSP::processFrame(
     bypassState_ = false;
 
     if (profile_.firValid) {
-        firWriteIndex_ =
-            (firWriteIndex_ +
-             kToneMatchFirTapCount - 1u) %
-            kToneMatchFirTapCount;
-
         const double dryLeft = left;
         const double dryRight = right;
 
-        const double wetLeft =
-            processFirSample(
-                dryLeft,
-                firHistoryLeft_);
-
-        const double wetRight =
-            processFirSample(
-                dryRight,
-                firHistoryRight_);
+        fir_->processFrame(left, right);
+        const double wetLeft = left;
+        const double wetRight = right;
 
         left =
             dryLeft +

@@ -46,4 +46,7 @@ OUTPUT: -12 dB to +12 dB, default 0 dB.
 Zoom: 100% / 150%.  
 Ctrl + left-click resets custom knobs to their actual parameter defaults.
 
-Version 1.0.0 - Windows x64 - VST3
+Version 1.0.1 - Windows x64 - VST3
+
+
+V1.0.1: zero-latency partitioned 4096-tap MATCH FIR CPU optimization. Bass voicing, parameter IDs and project recall remain compatible.

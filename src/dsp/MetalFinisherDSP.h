@@ -22,6 +22,8 @@ public:
     void setLowCut(double normalized) noexcept;
     void setToneMatchAmount(double normalized) noexcept;
     void setToneMatchProfile(const ToneMatchProfile& profile) noexcept;
+    void setToneMatchProfile(const ToneMatchProfile& profile,
+        const ZeroLatencyPartitionedFIR::PreparedKernel& kernel) noexcept;
     void clearToneMatchProfile() noexcept;
     void setMode(double normalized) noexcept;
 
@@ -155,6 +157,10 @@ private:
     int lowCutCoefficientCountdown_ {0};
     int massCoefficientCountdown_ {0};
     int makeupShelfCoefficientCountdown_ {0};
+    double lastMassContext_ {-1.0};
+    double lastLowCutFrequencyHz_ {-1.0};
+    double lastLowControlGainDb_ {1000.0};
+    double lastMakeupCancellationDb_ {1000.0};
 
     void updateLowCutCoefficients() noexcept;
     void updateLowControlCoefficients() noexcept;

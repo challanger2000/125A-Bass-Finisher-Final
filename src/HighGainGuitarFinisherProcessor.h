@@ -11,6 +11,7 @@
 
 #include <array>
 #include <atomic>
+#include <memory>
 
 namespace HighGainGuitarFinisher {
 
@@ -117,6 +118,9 @@ private:
     dsp::ToneMatchProfile toneMatchProfile_ {};
     dsp::ToneMatchSpectrumSnapshot toneMatchReferenceSpectrum_ {};
     dsp::ToneMatchProfileMailbox toneMatchMailbox_ {};
+    std::unique_ptr<dsp::ZeroLatencyPartitionedFIR::PreparedKernel>
+        pendingToneMatchKernel_ {
+            std::make_unique<dsp::ZeroLatencyPartitionedFIR::PreparedKernel>()};
     dsp::ToneMatchCaptureBuffer toneMatchCapture_ {};
     dsp::ToneMatchCaptureWorker toneMatchCaptureWorker_ {};
     std::atomic<bool> toneMatchCaptureActive_ {false};

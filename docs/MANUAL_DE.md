@@ -46,4 +46,6 @@ OUTPUT: -12 dB bis +12 dB, Default 0 dB.
 Zoom: 100% / 150%.  
 Ctrl + Linksklick setzt Custom-Knobs auf ihren echten Parameter-Default zurueck.
 
-Version 1.0.0 - Windows x64 - VST3
+Version 1.0.1 - Windows x64 - VST3
+
+V1.0.1: Weniger CPU-Last durch latenzfreie, partitionierte 4096-Tap-MATCH-Faltung. Bass-Klangcharakter, alle Regler, Presets und Projekte bleiben kompatibel.
