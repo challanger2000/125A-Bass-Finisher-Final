@@ -186,3 +186,25 @@ target_include_directories(BassFinisherFirCpuBenchmark
 target_compile_features(BassFinisherFirCpuBenchmark PRIVATE cxx_std_17)
 hggf_enable_project_warnings(BassFinisherFirCpuBenchmark)
 add_test(NAME BassFinisherFirCpuBenchmark COMMAND BassFinisherFirCpuBenchmark)
+
+
+add_executable(BassFinisherDemoGateTests
+    demo_gate_tests.cpp
+)
+target_include_directories(
+    BassFinisherDemoGateTests
+    PRIVATE
+        ../src
+)
+target_compile_features(
+    BassFinisherDemoGateTests
+    PRIVATE
+        cxx_std_17
+)
+hggf_enable_project_warnings(
+    BassFinisherDemoGateTests
+)
+add_test(
+    NAME BassFinisherDemoGateTests
+    COMMAND BassFinisherDemoGateTests
+)
