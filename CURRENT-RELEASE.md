@@ -1,5 +1,8 @@
 # Current Release
 
+
+> **2026-10-14 owner-local Gumroad FULL package inventory:** version **1.0.1**, evidenced by the owner's screenshot of `Downloads/Meine Plugins/zips`. This is a local FULL ZIP reference, **not independent proof of Gumroad publication or exact source commit**. Older release/status data below may refer to earlier development or QA milestones. Do not treat it as newer than the owner package without reconciling dated artifacts. Audit/source branch and source-to-binary relationship: **NOT VERIFIED** until confirmed. Demo branch recency must not override the actual FULL baseline. See `125A-Engineering/STANDARDS/REPOSITORY-WORKFLOW.md`.
+
 Product: **125A Bass Finisher V1**  
 Version: **1.0.0**  
 Platform: **Windows x64**  
